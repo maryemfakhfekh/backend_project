@@ -7,6 +7,7 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional; // ← import
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
@@ -29,8 +30,8 @@ public class IAService {
 
     private RestTemplate createRestTemplate() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(10000);   // 10 secondes
-        factory.setReadTimeout(120000);     // 120 secondes pour LLaMA
+        factory.setConnectTimeout(10000);
+        factory.setReadTimeout(120000);
         return new RestTemplate(factory);
     }
 
@@ -38,6 +39,7 @@ public class IAService {
         return System.getProperty("user.dir") + "/uploads/cvs/";
     }
 
+    @Transactional // ✅ Ouvre une nouvelle session JPA dans le thread
     public AnalyseIA analyserCV(Long candidatureId) {
 
         // 1) Récupérer la candidature
@@ -48,7 +50,6 @@ public class IAService {
         String cvPath = getCvDir() + candidature.getCvPath();
         File cvFile = new File(cvPath);
 
-        // Log pour debug
         System.out.println("Répertoire travail : " + System.getProperty("user.dir"));
         System.out.println("Chemin CV : " + cvPath);
         System.out.println("Fichier existe : " + cvFile.exists());
@@ -57,17 +58,25 @@ public class IAService {
             throw new RuntimeException("CV introuvable : " + cvPath);
         }
 
-        // 2) Construire le sujet JSON pour FastAPI
+        // 2) Construire le sujet JSON
+        // ✅ Forcer le chargement de toutes les relations lazy dans la transaction
+        List<String> competencesCibles = new ArrayList<>();
+        if (sujet.getCompetencesCibles() != null) {
+            competencesCibles = new ArrayList<>(sujet.getCompetencesCibles());
+        }
+
+        String filiereNom = sujet.getFiliereCible() != null
+                ? sujet.getFiliereCible().getNom() : null;
+        String cycleNom = sujet.getCycleCible() != null
+                ? sujet.getCycleCible().getNom() : null;
+
         Map<String, Object> sujetMap = new HashMap<>();
         sujetMap.put("title", sujet.getTitre());
-        sujetMap.put("description", sujet.getDescription() != null ?
-                sujet.getDescription() : "");
-        sujetMap.put("required_skills", sujet.getCompetencesCibles() != null ?
-                sujet.getCompetencesCibles() : new ArrayList<>());
-        sujetMap.put("filiere", sujet.getFiliereCible() != null ?
-                sujet.getFiliereCible().getNom() : null);
-        sujetMap.put("cycle", sujet.getCycleCible() != null ?
-                sujet.getCycleCible().getNom() : null);
+        sujetMap.put("description", sujet.getDescription() != null
+                ? sujet.getDescription() : "");
+        sujetMap.put("required_skills", competencesCibles);
+        sujetMap.put("filiere", filiereNom);
+        sujetMap.put("cycle", cycleNom);
 
         String sujetJson;
         try {
@@ -99,9 +108,9 @@ public class IAService {
         // Piliers
         Map<String, Object> pillars = (Map<String, Object>) scoreResponse.get("pillars");
         if (pillars != null) {
-            Map<String, Object> skills = (Map<String, Object>) pillars.get("skills");
+            Map<String, Object> skills    = (Map<String, Object>) pillars.get("skills");
             Map<String, Object> formation = (Map<String, Object>) pillars.get("formation");
-            Map<String, Object> experience = (Map<String, Object>) pillars.get("experience");
+            Map<String, Object> experience= (Map<String, Object>) pillars.get("experience");
 
             if (skills != null) {
                 analyse.setScoreCompetences(
@@ -119,7 +128,7 @@ public class IAService {
             }
         }
 
-        // Education lines depuis cv_info
+        // Education lines
         Map<String, Object> cvInfo = (Map<String, Object>) scoreResponse.get("cv_info");
         if (cvInfo != null) {
             analyse.setEducationLines((List<String>) cvInfo.get("education_lines"));
@@ -127,7 +136,7 @@ public class IAService {
 
         analyseIARepository.save(analyse);
 
-        // 6) Supprimer anciennes questions et sauvegarder nouvelles
+        // 6) Questions
         List<QuestionEntretien> oldQuestions =
                 questionEntretienRepository.findByCandidatureId(candidatureId);
         if (!oldQuestions.isEmpty()) {

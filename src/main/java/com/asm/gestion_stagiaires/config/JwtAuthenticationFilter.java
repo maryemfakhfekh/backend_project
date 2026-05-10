@@ -28,8 +28,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
+        String method = request.getMethod();
+
+        // ✅ Toujours ignorer OPTIONS (preflight CORS)
+        if ("OPTIONS".equalsIgnoreCase(method)) return true;
+
+        // ✅ Routes vraiment publiques — sans token du tout
+        // ⚠️ /api/references/ est retiré d'ici volontairement :
+        //    le filtre doit s'exécuter pour établir le SecurityContext
+        //    même si le token est absent — permitAll() gérera l'accès
         return path.startsWith("/api/auth/")
                 || path.startsWith("/api/cv/")
+                || path.startsWith("/api/demandes-acces/")
                 || path.startsWith("/uploads/");
     }
 
@@ -59,23 +69,29 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
         }
 
+        // ✅ Si pas de token → on laisse passer sans authentification
+        //    permitAll() dans SecurityConfig prendra le relais
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-            logger.info(">>> Authorities: {}", userDetails.getAuthorities());
+            try {
+                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                logger.info(">>> Authorities: {}", userDetails.getAuthorities());
 
-            if (jwtUtils.validateToken(token)) {
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(
-                                userDetails, null, userDetails.getAuthorities());
-                authentication.setDetails(
-                        new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-                logger.info(">>> Authentification OK pour: {}", username);
-            } else {
-                logger.warn(">>> Token invalide pour: {}", username);
+                if (jwtUtils.validateToken(token)) {
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(
+                                    userDetails, null, userDetails.getAuthorities());
+                    authentication.setDetails(
+                            new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                    logger.info(">>> Authentification OK pour: {}", username);
+                } else {
+                    logger.warn(">>> Token invalide pour: {}", username);
+                }
+            } catch (Exception e) {
+                logger.error(">>> Erreur chargement user: {}", e.getMessage());
             }
-        } else {
-            logger.warn(">>> Username null ou déjà authentifié. username={}", username);
+        } else if (username == null) {
+            logger.info(">>> Pas de token — accès anonyme, permitAll() gérera");
         }
 
         filterChain.doFilter(request, response);

@@ -28,6 +28,33 @@ public class EncadrantController {
     @Autowired
     private TacheRepository tacheRepository;
 
+    // ✅ Liste tous les encadrants — accessible RH et Admin
+    @GetMapping
+    @PreAuthorize("hasAnyAuthority('ROLE_RH', 'ROLE_ADMIN')")
+    public ResponseEntity<List<Map<String, Object>>> getAllEncadrants() {
+
+        List<Utilisateur> encadrants = utilisateurRepository.findByType(Encadrant.class);
+
+        List<Map<String, Object>> result = encadrants.stream().map(e -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", e.getId());
+            map.put("nomComplet", e.getPrenom() + " " + e.getNom());
+            map.put("email", e.getEmail());
+            map.put("telephone", e.getTelephone());
+
+            List<Stage> stages = stagiaireRepository.findByEncadrantId(e.getId());
+            map.put("nbStagiaires", stages.size());
+
+            if (e instanceof Encadrant enc) {
+                map.put("departement", enc.getDepartement());
+                map.put("specialite", enc.getSpecialite());
+            }
+            return map;
+        }).toList();
+
+        return ResponseEntity.ok(result);
+    }
+
     @GetMapping("/mes-stagiaires")
     @PreAuthorize("hasAuthority('ROLE_ENCADRANT')")
     public ResponseEntity<List<Stage>> getMesStagiaires(Principal principal) {

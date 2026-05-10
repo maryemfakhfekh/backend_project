@@ -22,6 +22,7 @@ public class CandidatureService {
     @Autowired private SujetStageRepository sujetStageRepository;
     @Autowired private UtilisateurRepository utilisateurRepository;
     @Autowired private EmailService emailService;
+    @Autowired private IAService iaService;
 
     // ===== CRÉATION =====
 
@@ -34,7 +35,24 @@ public class CandidatureService {
         candidature.setStagiaire(stagiaire);
         candidature.setStatut(StatusCandidature.EN_ATTENTE);
         candidature.setDateDepot(LocalDate.now());
-        return candidatureRepository.save(candidature);
+        Candidature saved = candidatureRepository.save(candidature);
+
+        // ✅ Lancer l'analyse IA en arrière-plan avec logs
+        new Thread(() -> {
+            System.out.println("=== THREAD IA DÉMARRÉ pour candidature ID: "
+                    + saved.getId() + " ===");
+            try {
+                iaService.analyserCV(saved.getId());
+                System.out.println("=== ANALYSE IA TERMINÉE pour ID: "
+                        + saved.getId() + " ===");
+            } catch (Exception e) {
+                System.err.println("=== ANALYSE IA ÉCHOUÉE : "
+                        + e.getMessage() + " ===");
+                e.printStackTrace();
+            }
+        }).start();
+
+        return saved;
     }
 
     // ===== LECTURE =====
@@ -65,7 +83,8 @@ public class CandidatureService {
     }
 
     public boolean hasAcceptedCandidature(Long stagiaireId) {
-        return candidatureRepository.existsByStagiaireIdAndStatut(stagiaireId, StatusCandidature.ACCEPTE);
+        return candidatureRepository.existsByStagiaireIdAndStatut(
+                stagiaireId, StatusCandidature.ACCEPTE);
     }
 
     public Utilisateur getUtilisateurByEmail(String email) {
@@ -73,7 +92,6 @@ public class CandidatureService {
                 .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
     }
 
-    // ===== NOUVEAU : Récupérer une candidature par ID =====
     public Candidature getCandidatureById(Long id) {
         return candidatureRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Candidature non trouvée"));
@@ -81,19 +99,23 @@ public class CandidatureService {
 
     // ===== RH : PLANIFIER ENTRETIEN AVEC ENCADRANT =====
 
-    public Candidature planifierEntretien(Long id, LocalDateTime dateEntretien, Long encadrantId) {
+    public Candidature planifierEntretien(
+            Long id, LocalDateTime dateEntretien, Long encadrantId) {
+
         Candidature candidature = candidatureRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Candidature non trouvée"));
 
         if (candidature.getStatut() != StatusCandidature.EN_ATTENTE) {
-            throw new RuntimeException("L'entretien ne peut être planifié que pour une candidature EN_ATTENTE");
+            throw new RuntimeException(
+                    "L'entretien ne peut être planifié que pour une candidature EN_ATTENTE");
         }
 
         Utilisateur encadrant = utilisateurRepository.findById(encadrantId)
                 .orElseThrow(() -> new RuntimeException("Encadrant non trouvé"));
 
         if (!(encadrant instanceof Encadrant)) {
-            throw new RuntimeException("L'utilisateur sélectionné n'est pas un encadrant");
+            throw new RuntimeException(
+                    "L'utilisateur sélectionné n'est pas un encadrant");
         }
 
         candidature.setDateEntretien(dateEntretien);
@@ -117,7 +139,6 @@ public class CandidatureService {
                     dateEntretien,
                     sujetTitre
             );
-
             emailService.envoyerEmailEntretien(
                     encadrant.getEmail(),
                     encadrant.getNom(),
@@ -135,23 +156,31 @@ public class CandidatureService {
         return saved;
     }
 
-    // ===== ENCADRANT : VALIDER APRÈS ENTRETIEN =====
+    // ===== ENCADRANT : MARQUER ENTRETIEN COMME RÉALISÉ =====
 
-    public Candidature validerParEncadrant(Long id, String emailEncadrant, String commentaire) {
+    public Candidature marquerEntretienRealise(
+            Long id, String emailEncadrant, String commentaire) {
+
         Candidature candidature = candidatureRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Candidature non trouvée"));
 
         if (candidature.getStatut() != StatusCandidature.EN_ENTRETIEN) {
-            throw new RuntimeException("Cette candidature n'est pas en phase d'entretien");
+            throw new RuntimeException(
+                    "Cette candidature n'est pas en phase d'entretien");
         }
 
         if (candidature.getEncadrant() == null
                 || !candidature.getEncadrant().getEmail().equals(emailEncadrant)) {
-            throw new RuntimeException("Vous n'êtes pas l'encadrant assigné à cette candidature");
+            throw new RuntimeException(
+                    "Vous n'êtes pas l'encadrant assigné à cette candidature");
+        }
+
+        if (commentaire == null || commentaire.trim().isEmpty()) {
+            throw new RuntimeException("Le commentaire est obligatoire");
         }
 
         candidature.setStatut(StatusCandidature.VALIDEE_ENCADRANT);
-        candidature.setCommentaireEncadrant(commentaire);
+        candidature.setCommentaireEncadrant(commentaire.trim());
         Candidature saved = candidatureRepository.save(candidature);
 
         Utilisateur stagiaire = candidature.getStagiaire();
@@ -167,45 +196,7 @@ public class CandidatureService {
                     sujetTitre, commentaire
             );
         } catch (Exception e) {
-            System.err.println("Erreur envoi email validation encadrant : " + e.getMessage());
-        }
-
-        return saved;
-    }
-
-    // ===== ENCADRANT : REFUSER APRÈS ENTRETIEN =====
-
-    public Candidature refuserParEncadrant(Long id, String emailEncadrant, String commentaire) {
-        Candidature candidature = candidatureRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Candidature non trouvée"));
-
-        if (candidature.getStatut() != StatusCandidature.EN_ENTRETIEN) {
-            throw new RuntimeException("Cette candidature n'est pas en phase d'entretien");
-        }
-
-        if (candidature.getEncadrant() == null
-                || !candidature.getEncadrant().getEmail().equals(emailEncadrant)) {
-            throw new RuntimeException("Vous n'êtes pas l'encadrant assigné à cette candidature");
-        }
-
-        candidature.setStatut(StatusCandidature.REFUSEE_ENCADRANT);
-        candidature.setCommentaireEncadrant(commentaire);
-        Candidature saved = candidatureRepository.save(candidature);
-
-        Utilisateur stagiaire = candidature.getStagiaire();
-        Utilisateur encadrant = candidature.getEncadrant();
-        String sujetTitre = candidature.getSujet() != null
-                ? candidature.getSujet().getTitre()
-                : "stage";
-
-        try {
-            emailService.envoyerEmailRefusEncadrantAuxRH(
-                    stagiaire.getNom(), stagiaire.getPrenom(),
-                    encadrant.getNom(), encadrant.getPrenom(),
-                    sujetTitre, commentaire
-            );
-        } catch (Exception e) {
-            System.err.println("Erreur envoi email refus encadrant : " + e.getMessage());
+            System.err.println("Erreur envoi email : " + e.getMessage());
         }
 
         return saved;
@@ -219,8 +210,7 @@ public class CandidatureService {
 
         if (candidature.getStatut() != StatusCandidature.VALIDEE_ENCADRANT) {
             throw new RuntimeException(
-                    "L'acceptation définitive nécessite la validation préalable de l'encadrant"
-            );
+                    "L'acceptation nécessite que l'encadrant ait réalisé l'entretien");
         }
 
         candidature.setStatut(StatusCandidature.ACCEPTE);

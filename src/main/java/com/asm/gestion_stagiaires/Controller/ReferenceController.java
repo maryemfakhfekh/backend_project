@@ -11,10 +11,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
-
 @RestController
 @RequestMapping("/api/references")
-@CrossOrigin("*")
+// ✅ Plus de @CrossOrigin ici — géré par SecurityConfig
 public class ReferenceController {
 
     @Autowired
@@ -22,8 +21,6 @@ public class ReferenceController {
 
     @Autowired
     private CycleRepository cycleRepository;
-
-    // ===== FILIÈRES =====
 
     @GetMapping("/filieres")
     public ResponseEntity<List<Filiere>> getAllFilieres() {
@@ -33,15 +30,18 @@ public class ReferenceController {
     @PostMapping("/filieres")
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> ajouterFiliere(@RequestBody Filiere filiere) {
-        if (filiereRepository.findAll().stream().anyMatch(f -> f.getNom().equalsIgnoreCase(filiere.getNom()))) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Cette filière existe déjà"));
+        if (filiereRepository.findAll().stream()
+                .anyMatch(f -> f.getNom().equalsIgnoreCase(filiere.getNom()))) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "Cette filière existe déjà"));
         }
         return ResponseEntity.ok(filiereRepository.save(filiere));
     }
 
     @PutMapping("/filieres/{id}")
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
-    public ResponseEntity<?> modifierFiliere(@PathVariable Long id, @RequestBody Filiere filiere) {
+    public ResponseEntity<?> modifierFiliere(@PathVariable Long id,
+                                             @RequestBody Filiere filiere) {
         return filiereRepository.findById(id).map(f -> {
             f.setNom(filiere.getNom());
             return ResponseEntity.ok(filiereRepository.save(f));
@@ -55,8 +55,6 @@ public class ReferenceController {
         return ResponseEntity.ok(Map.of("message", "Filière supprimée"));
     }
 
-    // ===== CYCLES =====
-
     @GetMapping("/cycles")
     public ResponseEntity<List<Cycle>> getAllCycles() {
         return ResponseEntity.ok(cycleRepository.findAll());
@@ -65,15 +63,18 @@ public class ReferenceController {
     @PostMapping("/cycles")
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> ajouterCycle(@RequestBody Cycle cycle) {
-        if (cycleRepository.findAll().stream().anyMatch(c -> c.getNom().equalsIgnoreCase(cycle.getNom()))) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Ce cycle existe déjà"));
+        if (cycleRepository.findAll().stream()
+                .anyMatch(c -> c.getNom().equalsIgnoreCase(cycle.getNom()))) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "Ce cycle existe déjà"));
         }
         return ResponseEntity.ok(cycleRepository.save(cycle));
     }
 
     @PutMapping("/cycles/{id}")
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
-    public ResponseEntity<?> modifierCycle(@PathVariable Long id, @RequestBody Cycle cycle) {
+    public ResponseEntity<?> modifierCycle(@PathVariable Long id,
+                                           @RequestBody Cycle cycle) {
         return cycleRepository.findById(id).map(c -> {
             c.setNom(cycle.getNom());
             return ResponseEntity.ok(cycleRepository.save(c));

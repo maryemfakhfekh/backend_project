@@ -39,59 +39,87 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
 
-                        // ✅ Encadrants — doit être AVANT le permitAll de /api/auth/**
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/auth/encadrants")
-                        .hasAuthority("ROLE_RH")
+                        // ✅ OPTIONS preflight — toujours en premier
+                        .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
 
+                        // ✅ Routes publiques sans token
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/references/**").permitAll()
                         .requestMatchers("/api/cv/**").permitAll()
                         .requestMatchers("/api/demandes-acces/**").permitAll()
                         .requestMatchers("/uploads/**").permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // ✅ Stats RH — accessible au RH et Admin
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/admin/stats")
-                        .hasAnyAuthority("ROLE_RH", "ROLE_ADMIN")
+                        // ✅ Références — entièrement publiques
+                        .requestMatchers("/api/references/**").permitAll()
 
-                        // ✅ Admin — reste protégé
+                        // ✅ Stats dashboard RH
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.GET, "/api/admin/stats"
+                        ).hasAnyAuthority("ROLE_RH", "ROLE_ADMIN")
+
+                        // ✅ Admin uniquement
                         .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
 
-                        // ✅ Stages — endpoints spécifiques stagiaire (AVANT la règle générique)
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/stages/has-dossier")
-                        .hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_STAGIAIRE")
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/stages/mon-dossier")
-                        .hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_STAGIAIRE")
-
-                        // ✅ Stages — liste générale RH et Admin
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/stages")
-                        .hasAnyAuthority("ROLE_RH", "ROLE_ADMIN")
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/stages/**")
-                        .hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_ENCADRANT")
-
-                        // ✅ Encadrants — endpoints spécifiques encadrant
-                        .requestMatchers("/api/encadrants/**").hasAuthority("ROLE_ENCADRANT")
+                        // ✅ Encadrants
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.GET, "/api/encadrants"
+                        ).hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_ENCADRANT")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.GET, "/api/encadrants/**"
+                        ).hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_ENCADRANT")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.POST, "/api/encadrants/**"
+                        ).hasAnyAuthority("ROLE_ADMIN", "ROLE_ENCADRANT")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.PUT, "/api/encadrants/**"
+                        ).hasAnyAuthority("ROLE_ADMIN", "ROLE_ENCADRANT")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.DELETE, "/api/encadrants/**"
+                        ).hasAuthority("ROLE_ADMIN")
+                        .requestMatchers("/api/rapports/fichier/**").hasAnyAuthority("ROLE_ENCADRANT", "ROLE_RH")
+                        // ✅ Stages
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.GET, "/api/stages/has-dossier"
+                        ).hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_STAGIAIRE")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.GET, "/api/stages/mon-dossier"
+                        ).hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_STAGIAIRE")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.GET, "/api/stages"
+                        ).hasAnyAuthority("ROLE_RH", "ROLE_ADMIN")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.GET, "/api/stages/**"
+                        ).hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_ENCADRANT")
 
                         // ✅ Candidatures
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/candidatures")
-                        .hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_STAGIAIRE", "ROLE_ENCADRANT")
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/candidatures/**")
-                        .hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_STAGIAIRE", "ROLE_ENCADRANT")
-                        .requestMatchers(org.springframework.http.HttpMethod.PUT, "/api/candidatures/**")
-                        .hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_ENCADRANT")
-                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/candidatures/**")
-                        .hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_STAGIAIRE")
-                        .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/api/candidatures/**")
-                        .hasAnyAuthority("ROLE_RH", "ROLE_ADMIN")
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/candidatures/encadrants")
-                        .hasAuthority("ROLE_RH")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.GET, "/api/candidatures/encadrants"
+                        ).hasAuthority("ROLE_RH")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.GET, "/api/candidatures"
+                        ).hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_STAGIAIRE", "ROLE_ENCADRANT")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.GET, "/api/candidatures/**"
+                        ).hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_STAGIAIRE", "ROLE_ENCADRANT")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.PUT, "/api/candidatures/**"
+                        ).hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_ENCADRANT")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.POST, "/api/candidatures/**"
+                        ).hasAnyAuthority("ROLE_RH", "ROLE_ADMIN", "ROLE_STAGIAIRE")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.DELETE, "/api/candidatures/**"
+                        ).hasAnyAuthority("ROLE_RH", "ROLE_ADMIN")
+
                         // ✅ Evaluations
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/evaluations")
-                        .hasAnyAuthority("ROLE_RH", "ROLE_ENCADRANT", "ROLE_STAGIAIRE", "ROLE_ADMIN")
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/evaluations/**")
-                        .hasAnyAuthority("ROLE_RH", "ROLE_ENCADRANT", "ROLE_STAGIAIRE", "ROLE_ADMIN")
-                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/evaluations/**")
-                        .hasAuthority("ROLE_ENCADRANT")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.GET, "/api/evaluations"
+                        ).hasAnyAuthority("ROLE_RH", "ROLE_ENCADRANT", "ROLE_STAGIAIRE", "ROLE_ADMIN")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.GET, "/api/evaluations/**"
+                        ).hasAnyAuthority("ROLE_RH", "ROLE_ENCADRANT", "ROLE_STAGIAIRE", "ROLE_ADMIN")
+                        .requestMatchers(
+                                org.springframework.http.HttpMethod.POST, "/api/evaluations/**"
+                        ).hasAuthority("ROLE_ENCADRANT")
 
                         .anyRequest().authenticated()
                 )
@@ -110,7 +138,6 @@ public class SecurityConfig {
             AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
-
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {

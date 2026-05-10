@@ -11,7 +11,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.Principal;
 import java.util.List;
 
@@ -59,5 +64,29 @@ public class RapportController {
     public ResponseEntity<Rapport> rapportDuStagiaire(
             @PathVariable Long stagiaireId) {
         return ResponseEntity.ok(rapportService.getRapportByStagiaire(stagiaireId));
+    }
+    @GetMapping("/fichier/{fileName:.+}")
+    @PreAuthorize("hasAuthority('ROLE_ENCADRANT') or hasAuthority('ROLE_RH')")
+    public ResponseEntity<Resource> getFichier(@PathVariable String fileName) {
+        try {
+            Path filePath = Paths.get("uploads/cvs").resolve(fileName).normalize();
+            Resource resource = new UrlResource(filePath.toUri());
+
+            if (!resource.exists()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            String contentType = fileName.endsWith(".pdf")
+                    ? "application/pdf"
+                    : "application/octet-stream";
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "inline; filename=\"" + resource.getFilename() + "\"")
+                    .body(resource);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }

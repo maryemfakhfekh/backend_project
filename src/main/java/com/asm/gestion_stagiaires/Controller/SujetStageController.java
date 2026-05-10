@@ -14,7 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-
+import com.asm.gestion_stagiaires.models.Stagiaire;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -52,13 +52,28 @@ public class SujetStageController {
     }
 
     @GetMapping("/disponibles")
-    public ResponseEntity<List<SujetStageDTO>> voirSujetsDisponibles() {
-        List<SujetStageDTO> offres = sujetStageRepository
-                .findByEstDisponibleTrue()
-                .stream()
-                .map(this::toDTO)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(offres);
+    public ResponseEntity<List<SujetStageDTO>> voirSujetsDisponibles(
+            @AuthenticationPrincipal Utilisateur utilisateur) {
+
+        List<SujetStage> offres;
+
+        if (utilisateur instanceof Stagiaire stagiaire
+                && stagiaire.getCycle() != null
+                && stagiaire.getFiliere() != null) {
+
+            offres = sujetStageRepository
+                    .findByCycleCibleIdAndFiliereCibleIdAndEstDisponibleTrue(
+                            stagiaire.getCycle().getId(),
+                            stagiaire.getFiliere().getId()
+                    );
+        } else {
+            // RH / Admin voient tous les sujets disponibles
+            offres = sujetStageRepository.findByEstDisponibleTrue();
+        }
+
+        return ResponseEntity.ok(
+                offres.stream().map(this::toDTO).collect(Collectors.toList())
+        );
     }
 
     @PostMapping("/publier")

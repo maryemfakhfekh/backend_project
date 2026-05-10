@@ -14,4 +14,5 @@ public interface SujetStageRepository extends JpaRepository<SujetStage, Long> {
     List<SujetStage> findByCycleCibleId(Long cycleId);
     List<SujetStage> findByEstDisponibleTrue();
     List<SujetStage> findByCycleCibleIdAndFiliereCibleId(Long cycleId, Long filiereId);
+    List<SujetStage> findByCycleCibleIdAndFiliereCibleIdAndEstDisponibleTrue(Long cycleId, Long filiereId);
 }
